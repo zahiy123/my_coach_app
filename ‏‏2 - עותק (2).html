@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>מערכת אימון אישית - גרסה 3</title>
+<title>מערכת אימון אישי - גרסה 3</title>
 <style>
   :root{ --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#94a3b8; --line:#334155; --acc:#22c55e; --danger:#ef4444; --warning:#f59e0b }
   *{box-sizing:border-box}
@@ -244,11 +244,11 @@
     }
 
     function speak(text, tone = 'default') {
-        if (synth.speaking) {
-            console.warn('speechSynthesis.speaking');
-            return;
-        }
         if (text !== '') {
+            if (synth.speaking) {
+                console.warn('speechSynthesis.speaking');
+                return;
+            }
             let utterThis = new SpeechSynthesisUtterance(text);
             utterThis.lang = 'he-IL';
             utterThis.pitch = 1;
@@ -480,7 +480,7 @@
             }
 
             // Check if reps are completed
-            if (block.reps && exerciseCounter >= block.reps) {
+            if (workoutPlan[currentBlockIndex].reps && exerciseCounter >= workoutPlan[currentBlockIndex].reps) {
               nextBlock();
             }
 
@@ -587,7 +587,7 @@
         -  ענה על כל השאלה`;
 
         try {
-            const apiKey = "AIzaSyA1KQuYyACZl1LXolr7xQTrxBPlizmT_98"; 
+            const apiKey = "AIzaSyA1KQuYyACZl1LXolr7xQTrxBPlizmS78"; 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
             
             const payload = {
@@ -671,24 +671,22 @@
     }
 
     async function setupCamera() {
-    const video = $('video');
-    try {
-        // ניסיון ראשון: בקשת גישה למצלמה האחורית בצורה גמישה
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: { ideal: "environment" } } 
-        });
-        video.srcObject = stream;
-    } catch (err) {
-        // אם המצלמה האחורית לא זמינה, נסה מצלמה כלשהי (בדרך כלל הקדמית)
+        const video = $('video');
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: { ideal: "environment" } } 
+            });
             video.srcObject = stream;
         } catch (err) {
-            console.error("שגיאה בגישה למצלמה:", err);
-            updateCoachingFeedback("שגיאה בגישה למצלמה. וודא שאישרת גישה ונסה שוב.", 'correction');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("שגיאה בגישה למצלמה:", err);
+                updateCoachingFeedback("שגיאה בגישה למצלמה. וודא שאישרת גישה ונסה שוב.", 'correction');
+            }
         }
     }
-}
     
     async function startTraining() {
         if (!workoutPlan) {
@@ -701,6 +699,8 @@
             return;
         }
         
+        speak("התחל אימון!");
+
         $('startBtn').style.display = 'none';
         $('pauseBtn').disabled = false;
         $('nextBtn').disabled = false;
@@ -832,8 +832,18 @@
             console.warn('Speech Synthesis not supported in this browser.');
         }
 
-        document.querySelector('.tab').classList.add('active');
-        document.querySelector('.tab-content').classList.add('active');
+        // תיקון: מצא את הטאב הראשון (שכבר מוגדר)
+        const firstTab = document.querySelector('.tab');
+        const firstTabContent = document.getElementById('tab1'); // מצא את התוכן של הטאב הראשון
+
+        // הוסף את המחלקה 'active' לטאב ולתוכן שלו כדי שיפעלו כראוי
+        if (firstTab && firstTabContent) {
+            firstTab.classList.add('active');
+            firstTabContent.classList.add('active');
+        } else {
+            console.error("שגיאה: לא נמצאו הטאבים והתוכן שלהם.");
+        }
+
 
         updateCoachingFeedback('טוען את מודל המאמן הווירטואלי...', 'info');
         $('startBtn').disabled = true;
