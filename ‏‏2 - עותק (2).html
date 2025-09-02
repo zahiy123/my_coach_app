@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>מערכת אימון אישית - גרסה 3</title>
+<style>
+  :root{ --bg:#0b1220; --panel:#0f172a; --ink:#e5e7eb; --muted:#94a3b8; --line:#334155; --acc:#22c55e; --danger:#ef4444; --warning:#f59e0b }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,Heebo,Arial}
+  header{position:sticky;top:0;background:#0b1220cc;backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:12px 18px;z-index:10}
+  h1{margin:0;font-size:20px}
+  main{max-width:1280px;margin:0 auto;padding:16px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  .tab{padding:10px 14px;border:1px solid var(--line);border-radius:10px;background:#121a2c;cursor:pointer;opacity:0.6;font-weight:600}
+  .tab.active{opacity:1;background:var(--panel);border-color:var(--acc);color:var(--acc)}
+  .tab-content{display:none}
+  .tab-content.active{display:block}
+  .form-group{margin-bottom:16px}
+  label{display:block;margin-bottom:8px;font-size:14px;color:var(--muted)}
+  input,select,textarea{width:100%;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--ink);font-size:16px}
+  textarea{min-height:100px;resize:vertical}
+  button{width:100%;padding:14px;background:var(--acc);color:white;border:none;border-radius:8px;cursor:pointer;font-size:16px;font-weight:bold;transition:background 0.2s ease-in-out}
+  button:disabled{background:#121a2c;color:var(--muted);cursor:not-allowed}
+  button:hover:not(:disabled){background:#15803d}
+  .btn-danger{background:var(--danger);margin-top:10px}
+  .btn-danger:hover{background:#dc2626}
+  .video-container{position:relative;width:100%;max-width:640px;margin:0 auto;background:#000;border-radius:10px;overflow:hidden}
+  video{width:100%;height:auto;display:block}
+  canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+  .controls{display:flex;justify-content:space-around;gap:10px;margin-top:16px}
+  .info-panel{background:var(--panel);padding:16px;border-radius:10px;margin-top:16px}
+  .info-panel h2{margin:0 0 16px 0;font-size:18px;border-bottom:1px solid var(--line);padding-bottom:10px}
+  .timer,.counter{font-size:24px;font-weight:bold;color:var(--acc)}
+  .coaching-status{background:var(--line);padding:12px;border-radius:8px;margin-top:16px;font-size:18px;text-align:center;font-weight:600}
+  .feedback-list{list-style:none;padding:0;margin:16px 0 0 0}
+  .feedback-list li{padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:14px}
+  .feedback-correction{background:var(--danger);color:white}
+  .feedback-info{background:var(--line);color:var(--ink)}
+  .feedback-motivation{background:var(--acc);color:white}
+  .exercise-details{background:var(--panel);padding:16px;border-radius:10px;margin-top:16px}
+  .exercise-details h3{margin:0 0 10px 0;font-size:16px}
+  .exercise-details p{margin:0 0 8px 0;font-size:14px}
+  .loading-indicator{text-align:center;margin-top:20px}
+  .spinner{border:4px solid rgba(255,255,255,.3);border-radius:50%;border-top-color:var(--acc);width:30px;height:30px;animation:spin 1s ease-in-out infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+  .checkbox-group input[type="checkbox"] {
+    width: auto;
+  }
+  @media (max-width: 768px) {
+    body {
+      padding: 0;
+    }
+    main {
+      padding: 10px;
+    }
+    .tabs {
+      flex-direction: column;
+      gap: 5px;
+    }
+    .tab {
+      width: 100%;
+      text-align: center;
+    }
+    .controls {
+      flex-direction: column;
+      gap: 10px;
+    }
+    .info-panel, .exercise-details {
+      padding: 12px;
+    }
+    h1 {
+      font-size: 18px;
+    }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@4.0.0/marked.min.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>מאמן כושר AI אישי</h1>
+</header>
+
+<main>
+  <div class="tabs">
+    <div class="tab active" data-tab="tab1">שלב 1: פרופיל</div>
+    <div class="tab" data-tab="tab2">שלב 2: ענף ומטרות</div>
+    <div class="tab" data-tab="tab3">שלב 3: תוכנית (AI)</div>
+    <div class="tab" data-tab="tab4">שלב 4: מאמן חי (PRO)</div>
+  </div>
+
+  <div id="tab1" class="tab-content active">
+    <h2>הגדרת פרופיל אישי</h2>
+    <div class="form-group">
+      <label for="userName">שם:</label>
+      <input type="text" id="userName" placeholder="הכנס שם">
+    </div>
+    <div class="form-group">
+      <label for="userAge">גיל:</label>
+      <input type="number" id="userAge" placeholder="הכנס גיל">
+    </div>
+    <div class="form-group">
+      <label for="userHeight">גובה (ס"מ):</label>
+      <input type="number" id="userHeight" placeholder="הכנס גובה">
+    </div>
+    <div class="form-group">
+      <label for="userWeight">משקל (ק"ג):</label>
+      <input type="number" id="userWeight" placeholder="הכנס משקל">
+    </div>
+    <div class="form-group">
+      <label for="userFitnessLevel">רמת כושר:</label>
+      <select id="userFitnessLevel">
+        <option value="מתחיל">מתחיל</option>
+        <option value="בינוני">בינוני</option>
+        <option value="מתקדם">מתקדם</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="userLimitations">מגבלות רפואיות/גופניות (אופציונלי):</label>
+      <textarea id="userLimitations" placeholder="קטיעה מתחת לברך ימין, בעיות גב, כאבי מפרקים..."></textarea>
+    </div>
+    <button onclick="nextTab()">הבא</button>
+  </div>
+
+  <div id="tab2" class="tab-content">
+    <h2>בחירת ענף ומטרות אימון</h2>
+    <div class="form-group">
+      <label for="sportType">ענף ספורט:</label>
+      <select id="sportType">
+        <option value="כדורגל קטועים">כדורגל קטועים</option>
+        <option value="כושר כללי">כושר כללי</option>
+        <option value="ריצה">ריצה</option>
+        <option value="כדורסל">כדורסל</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>מטרות האימון:</label>
+      <div id="trainingGoals" class="checkbox-group">
+        <label><input type="checkbox" name="trainingGoal" value="כוח"> כוח</label>
+        <label><input type="checkbox" name="trainingGoal" value="סיבולת"> סיבולת</label>
+        <label><input type="checkbox" name="trainingGoal" value="שיפור טכניקה" checked> שיפור טכניקה</label>
+        <label><input type="checkbox" name="trainingGoal" value="שיקום"> שיקום</label>
+        <label><input type="checkbox" name="trainingGoal" value="ירידה במשקל"> ירידה במשקל</label>
+        <label><input type="checkbox" name="trainingGoal" value="היפרטרופיה"> היפרטרופיה</label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="trainingFrequency">תדירות אימונים (בשבוע):</label>
+      <input type="number" id="trainingFrequency" value="3" min="1" max="7">
+    </div>
+    <div class="form-group">
+      <label for="trainingDuration">משך אימון (דקות):</label>
+      <input type="number" id="trainingDuration" value="45" min="10">
+    </div>
+    <div class="form-group">
+      <label for="availableEquipment">ציוד זמין (אופציונלי):</label>
+      <textarea id="availableEquipment" placeholder="משקולות, מזרן, גומיות..."></textarea>
+    </div>
+    <button onclick="nextTab()">הבא</button>
+  </div>
+
+  <div id="tab3" class="tab-content">
+    <h2>תוכנית אימון בהכנת AI</h2>
+    <p>ה-AI מנתח את הנתונים שלך כדי לבנות תוכנית אימון מקצועית ומותאמת אישית.</p>
+    <div id="loadingIndicator" class="loading-indicator" style="display:none;">
+      <div class="spinner"></div>
+      <p>יוצר תוכנית אימון באמצעות AI...</p>
+    </div>
+    <div id="workoutPlanDisplay"></div>
+    <button id="generateBtn" onclick="generateWorkoutPlan()">צור תוכנית אימון</button>
+    <button id="startTrainingBtn" style="display:none;" onclick="nextTab()">התחל אימון</button>
+    <button id="exportMarkdownBtn" style="display:none;">ייצא כ-Markdown</button>
+    <button id="exportJsonBtn" style="display:none;">ייצא כ-JSON</button>
+  </div>
+
+  <div id="tab4" class="tab-content">
+    <h2>המאמן האישי הווירטואלי שלך</h2>
+    <p>המערכת תשתמש במצלמה כדי לנתח את תנועותיך ולספק משוב בזמן אמת.</p>
+    <div class="video-container">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="outputCanvas"></canvas>
+    </div>
+    <div class="controls">
+      <button id="startBtn">התחל אימון</button>
+      <button id="pauseBtn" disabled>השהה</button>
+      <button id="nextBtn" disabled>תרגיל הבא</button>
+      <button id="stopBtn" disabled class="btn-danger">עצור</button>
+    </div>
+    <div class="info-panel">
+      <h2>סטטוס אימון</h2>
+      <p>זמן מנוחה: <span id="rest">—</span></p>
+      <p>תרגיל נוכחי: <span id="currentExercise">—</span></p>
+      <p>חזרות/משך: <span id="counter">—</span></p>
+    </div>
+    <div id="coachStatus" class="coaching-status">המאמן הווירטואלי מוכן</div>
+    <ul id="feedbackList" class="feedback-list"></ul>
+    <div id="exerciseDetails" class="exercise-details" style="display:none;">
+      <h3>פרטי התרגיל</h3>
+      <p><strong>הסבר:</strong> <span id="exerciseExplanation"></span></p>
+      <p><strong>טיפים לביצוע:</strong> <span id="exerciseTips"></span></p>
+    </div>
+  </div>
+</main>
+
+<script>
+    let synth = window.speechSynthesis;
+    let audioContext = null;
+    let coachStatusElement = document.getElementById('coachStatus');
+    let poseDetector;
+    let workoutPlan;
+    let currentBlockIndex = 0;
+    let restTime = 0;
+    let restId;
+    let running = false;
+    let paused = false;
+    let animationFrameId;
+    let previousKeypoints = null;
+    let detectorReady = false;
+    let exerciseCounter = 0;
+    let exerciseState = 'start';
+    let consecutiveCorrectReps = 0;
+    let inactivityTimerId;
+    let inactivityThreshold = 10000; // 10 seconds
+    let activityDetected = false;
+
+    function $(id) {
+        return document.getElementById(id);
+    }
+
+    function speak(text, tone = 'default') {
+        if (synth.speaking) {
+            console.warn('speechSynthesis.speaking');
+            return;
+        }
+        if (text !== '') {
+            let utterThis = new SpeechSynthesisUtterance(text);
+            utterThis.lang = 'he-IL';
+            utterThis.pitch = 1;
+            utterThis.rate = 1.1;
+            if (tone === 'correction') {
+                utterThis.rate = 1.2;
+                utterThis.pitch = 1.2;
+            }
+            if (tone === 'motivation') {
+                utterThis.rate = 1.1;
+                utterThis.pitch = 1.1;
+            }
+            synth.speak(utterThis);
+        }
+    }
+
+    function updateCoachingFeedback(message, type = 'info') {
+        const feedbackList = $('feedbackList');
+        const newItem = document.createElement('li');
+        newItem.textContent = message;
+        newItem.className = `feedback-${type}`;
+        feedbackList.prepend(newItem);
+        while (feedbackList.children.length > 5) {
+            feedbackList.removeChild(feedbackList.lastChild);
+        }
+        coachStatusElement.textContent = message;
+        speak(message, type);
+    }
+    
+    function calculateAngle(p1, p2, p3) {
+        if (!p1 || !p2 || !p3) return 0;
+        const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
+        let angle = Math.abs(radians * 180.0 / Math.PI);
+        if (angle > 180.0) {
+            angle = 360.0 - angle;
+        }
+        return angle;
+    }
+
+    function checkAmputeeRunTechnique(keypoints, previousKeypoints) {
+        const leftWrist = keypoints.find(kp => kp.name === 'leftWrist');
+        const rightWrist = keypoints.find(kp => kp.name === 'rightWrist');
+        const leftShoulder = keypoints.find(kp => kp.name === 'leftShoulder');
+        const rightShoulder = keypoints.find(kp => kp.name === 'rightShoulder');
+        const leftElbow = keypoints.find(kp => kp.name === 'leftElbow');
+        const rightElbow = keypoints.find(kp => kp.name === 'rightElbow');
+
+        if (leftWrist && rightWrist && leftShoulder && rightShoulder && leftElbow && rightElbow) {
+            const crutchDistance = Math.abs(leftWrist.x - rightWrist.x);
+            const shoulderDistance = Math.abs(leftShoulder.x - rightShoulder.x);
+            if (crutchDistance > shoulderDistance * 1.5) {
+                return "אני רואה שהקביים פתוחות מדי, נסה לסגור אותן מעט למרכז הגוף.";
+            }
+            const leftArmAngle = calculateAngle(leftShoulder, leftElbow, leftWrist);
+            const rightArmAngle = calculateAngle(rightShoulder, rightElbow, rightWrist);
+            if (leftArmAngle > 165 || rightArmAngle > 165) {
+                return "הרפה קצת את הידיים. עבודה חזקה מדי עם ידיים ישרות מונעת זרימה.";
+            }
+        }
+        return null;
+    }
+
+    function checkDribbleKickPassTechnique(keypoints, previousKeypoints) {
+        const leftAnkle = keypoints.find(kp => kp.name === 'leftAnkle');
+        const rightAnkle = keypoints.find(kp => kp.name === 'rightAnkle');
+        if (previousKeypoints && (leftAnkle || rightAnkle)) {
+            const prevLeftAnkle = previousKeypoints.find(kp => kp.name === 'leftAnkle');
+            const prevRightAnkle = previousKeypoints.find(kp => kp.name === 'rightAnkle');
+            if (leftAnkle && prevLeftAnkle && Math.abs(leftAnkle.x - prevLeftAnkle.x) > 20) {
+                return "נראה שאתה מבצע דריבל. דאג להשאיר את המבט למעלה ולא רק על הכדור.";
+            }
+            if (rightAnkle && prevRightAnkle && Math.abs(rightAnkle.x - prevRightAnkle.x) > 20) {
+                return "הדריבל שלך מצוין. שמור על כף הרגל קרוב לכדור ושלוט בו.";
+            }
+            const leftHip = keypoints.find(kp => kp.name === 'leftHip');
+            const leftKnee = keypoints.find(kp => kp.name === 'leftKnee');
+            const kickAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+            if (kickAngle < 80) {
+                return "שים לב למנח הגוף בזמן הבעיטה. שמור על מרכז כובד יציב.";
+            }
+        }
+        return null;
+    }
+    
+    const positiveFeedback = [
+        'מעולה!',
+        'המשך כך!',
+        'ביצוע מושלם!',
+        'נהדר!',
+        'מצוין, חזרה נכונה!'
+    ];
+
+    function checkSquatTechnique(keypoints) {
+        const leftHip = keypoints.find(kp => kp.name === 'leftHip');
+        const leftKnee = keypoints.find(kp => kp.name === 'leftKnee');
+        const leftAnkle = keypoints.find(kp => kp.name === 'leftAnkle');
+
+        if (!leftHip || !leftKnee || !leftAnkle) return null;
+
+        const kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+        const hipY = leftHip.y;
+        const kneeY = leftKnee.y;
+        
+        let feedback = null;
+
+        const isGoodForm = (kneeAngle > 90 && kneeAngle < 100);
+        const isBackStraight = (hipY < kneeY);
+
+        if (!isBackStraight) {
+            feedback = "שים לב לא לעגל את הגב. החזק גב ישר!";
+        }
+
+        if (kneeAngle < 80) {
+            feedback = "תרד עוד קצת! שואף שהירכיים יהיו מקבילות לרצפה.";
+        } else if (kneeAngle > 140) {
+            feedback = "אתה לא יורד מספיק. נסה להקפיד על טווח תנועה מלא.";
+        }
+        
+        // ספירת חזרות
+        if (exerciseState === 'down' && kneeAngle < 100) {
+            exerciseState = 'up';
+            updateCoachingFeedback("מעולה, יורד נמוך! עכשיו תעלה בחזרה.", 'motivation');
+            speak("מעולה, עכשיו תעלה בחזרה.", 'motivation');
+        } else if (exerciseState === 'up' && kneeAngle > 160) {
+            if (isGoodForm) {
+                exerciseCounter++;
+                consecutiveCorrectReps++;
+                speak(`חזרה ${exerciseCounter}`);
+                const randomFeedback = positiveFeedback[Math.floor(Math.random() * positiveFeedback.length)];
+                updateCoachingFeedback(`${randomFeedback} חזרה מספר ${exerciseCounter} בוצעה נכון!`, 'motivation');
+                speak(randomFeedback, 'motivation');
+            } else {
+                updateCoachingFeedback("צורת הביצוע לא מושלמת, תקן אותה כדי שהחזרות ייספרו.", 'correction');
+                speak("שים לב לצורת הביצוע, תקן אותה כדי שהחזרות ייספרו.", 'correction');
+            }
+            exerciseState = 'down';
+        }
+
+        if (consecutiveCorrectReps > 0 && consecutiveCorrectReps % 3 === 0) {
+            speak("קצב נהדר! תמשיך ככה!", 'motivation');
+            consecutiveCorrectReps = 0;
+        }
+        
+        return feedback;
+    }
+
+    function checkPlankTechnique(keypoints) {
+        const leftShoulder = keypoints.find(kp => kp.name === 'leftShoulder');
+        const leftHip = keypoints.find(kp => kp.name === 'leftHip');
+        const leftAnkle = keypoints.find(kp => kp.name === 'leftAnkle');
+
+        if (!leftShoulder || !leftHip || !leftAnkle) return null;
+
+        const hipY = leftHip.y;
+        const shoulderY = leftShoulder.y;
+        
+        let feedback = null;
+
+        if (hipY > shoulderY + 20) {
+            feedback = "הישבן שלך נמוך מדי, הרם אותו כדי ליישר את הגב!";
+        } else if (hipY < shoulderY - 20) {
+            feedback = "הישבן שלך גבוה מדי, הורד אותו! שואף לקו ישר מהראש עד העקבים.";
+        }
+
+        return feedback;
+    }
+
+    async function trainingLoop() {
+        if (!running) return;
+        animationFrameId = requestAnimationFrame(trainingLoop);
+
+        if (paused || !video.srcObject) return;
+        
+        const poses = await poseDetector.estimatePoses(video);
+        
+        if (poses && poses.length > 0) {
+            const keypoints = poses[0].keypoints;
+            let feedbackMessage = null;
+            const currentExercise = workoutPlan[currentBlockIndex].exercise;
+            
+            // Check for significant movement
+            if (previousKeypoints) {
+                let totalMovement = 0;
+                for (let i = 0; i < keypoints.length; i++) {
+                    const prevKp = previousKeypoints.find(p => p.name === keypoints[i].name);
+                    if (prevKp) {
+                        totalMovement += Math.sqrt(Math.pow(keypoints[i].x - prevKp.x, 2) + Math.pow(keypoints[i].y - prevKp.y, 2));
+                    }
+                }
+                if (totalMovement > 10) { // A small threshold to account for minor fluctuations
+                    activityDetected = true;
+                }
+            }
+            
+            if (activityDetected) {
+                clearTimeout(inactivityTimerId);
+                
+                switch (currentExercise) {
+                    case 'ריצה עם קביים':
+                        feedbackMessage = checkAmputeeRunTechnique(keypoints, previousKeypoints);
+                        break;
+                    case 'דריבל, בעיטה ומסירה':
+                        feedbackMessage = checkDribbleKickPassTechnique(keypoints, previousKeypoints);
+                        break;
+                    case 'סקוואט':
+                        feedbackMessage = checkSquatTechnique(keypoints);
+                        break;
+                    case 'פלאנק':
+                        feedbackMessage = checkPlankTechnique(keypoints);
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                feedbackMessage = "יאללה, בוא נתחיל!";
+                speak(feedbackMessage, 'motivation');
+            }
+
+
+            if (feedbackMessage) {
+                updateCoachingFeedback(feedbackMessage, 'correction');
+            }
+            
+            previousKeypoints = keypoints;
+
+            // עדכון מונה חזרות
+            if (workoutPlan[currentBlockIndex].reps) {
+                $('counter').textContent = `חזרות: ${exerciseCounter}/${workoutPlan[currentBlockIndex].reps}`;
+            }
+
+            // Check if reps are completed
+            if (block.reps && exerciseCounter >= block.reps) {
+              nextBlock();
+            }
+
+        }
+    }
+    
+    const motivationalPhrases = [
+        "יאללה, בוא נתחיל!",
+        "קדימה, אתה יכול לעשות את זה!",
+        "האימון שלך מחכה לך!",
+        "אני כאן כדי לעזור, אבל אתה צריך לזוז קודם!",
+        "בוא נהפוך את המוכנות הזו לפעולה!"
+    ];
+
+    function checkInactivity() {
+        if (running && !paused) {
+            const randomPhrase = motivationalPhrases[Math.floor(Math.random() * motivationalPhrases.length)];
+            speak(randomPhrase, 'motivation');
+            updateCoachingFeedback(randomPhrase, 'motivation');
+            inactivityTimerId = setTimeout(checkInactivity, inactivityThreshold);
+        }
+    }
+
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const targetTab = tab.dataset.tab;
+            tabs.forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(targetTab).classList.add('active');
+        });
+    });
+
+    function nextTab() {
+        const activeTab = document.querySelector('.tab.active');
+        const nextTab = activeTab.nextElementSibling;
+        if (nextTab) {
+            activeTab.classList.remove('active');
+            nextTab.classList.add('active');
+            const targetContent = document.getElementById(nextTab.dataset.tab);
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            targetContent.classList.add('active');
+        }
+    }
+
+    async function generateWorkoutPlan() {
+        const generateBtn = $('generateBtn');
+        const startTrainingBtn = $('startTrainingBtn');
+        const exportMarkdownBtn = $('exportMarkdownBtn');
+        const exportJsonBtn = $('exportJsonBtn');
+        const loadingIndicator = $('loadingIndicator');
+        const workoutPlanDisplay = $('workoutPlanDisplay');
+
+        generateBtn.disabled = true;
+        loadingIndicator.style.display = 'block';
+        workoutPlanDisplay.innerHTML = '';
+        
+        const userName = $('userName').value;
+        const userAge = $('userAge').value;
+        const userHeight = $('userHeight').value;
+        const userWeight = $('userWeight').value;
+        const userFitnessLevel = $('userFitnessLevel').value;
+        const userLimitations = $('userLimitations').value;
+        const sportType = $('sportType').value;
+
+        const selectedGoals = Array.from(document.querySelectorAll('input[name="trainingGoal"]:checked'))
+                               .map(checkbox => checkbox.value)
+                               .join(', ');
+        
+        const trainingFrequency = $('trainingFrequency').value;
+        const trainingDuration = $('trainingDuration').value;
+        const availableEquipment = $('availableEquipment').value;
+
+        const prompt = `אתה מאמן כושר מקצועי ומומחה ליצירת תוכניות אימון.
+        המשימה שלך: בנה תוכנית אימונים מפורטת ומקצועית לשבוע אחד, שתהיה מותאמת אישית למתאמן.
+        
+        **פרטי המתאמן:**
+        - **שם:** ${userName}
+        - **גיל:** ${userAge}
+        - **משקל:** ${userWeight}
+        - **גובה:** ${userHeight}
+        - **רמת כושר:** ${userFitnessLevel}
+        - **מגבלות גופניות:** ${userLimitations || 'אין'}
+        - **ענף ספורט:** ${sportType}
+        - **מטרות:** ${selectedGoals || 'אין'}
+        - **תדירות:** ${trainingFrequency} אימונים בשבוע
+        - **משך האימון:** ${trainingDuration} דקות
+        - **ציוד זמין:** ${availableEquipment || 'אין'}
+
+        **הנחיות לתכנון:**
+        1.  חלק את האימונים לימים מוגדרים.
+        2.  כל אימון צריך לכלול:
+            - חימום (5 דקות).
+            - תרגילי כוח/סבולת/טכניקה (עם פירוט סטים, חזרות, וזמני מנוחה).
+            - תרגילים ספציפיים למטרות ולענף הספורט.
+            - התייחס למגבלות הגופניות וספק חלופות מתאימות לתרגילים סטנדרטיים.
+            - מתיחות בסיום (5 דקות).
+        3.  השתמש במונחים מקצועיים אך פשוטים להבנה.
+        4.  הדגש את החשיבות של טכניקה נכונה והימנעות מפציעות.
+
+        **פורמט התשובה:**
+        -  הצג את התוכנית בפורמט Markdown ברור ונוח לקריאה.
+        -  ענה על כל השאלה`;
+
+        try {
+            const apiKey = "AIzaSyA1KQuYyACZl1LXolr7xQTrxBPlizmT_98"; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }]
+            };
+            
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`API Error: ${response.status} - ${JSON.stringify(errorData)}`);
+            }
+            
+            const result = await response.json();
+            const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+            
+            if (text) {
+                workoutPlanDisplay.innerHTML = `
+                    <div style="background:var(--panel); padding: 16px; border-radius: 8px;">
+                        ${marked.parse(text)}
+                    </div>
+                `;
+            } else {
+                throw new Error('No text generated from API response.');
+            }
+            
+            workoutPlan = [
+              {
+                type: 'exercise',
+                exercise: 'חימום: סיבובי כתפיים',
+                duration: 60, // Duration in seconds
+                explanation: 'התחל לחמם את הגוף עם סיבובי כתפיים גדולים קדימה ואחורה.',
+                tips: 'בצע את התנועה לאט ובשליטה, אל תמהר.'
+              },
+              {
+                type: 'exercise',
+                exercise: 'סקוואט',
+                reps: 10,
+                rest: 60,
+                explanation: 'עמוד בפיסוק כתפיים, גב ישר. ירד כאילו אתה מתיישב על כיסא, ושמור על הברכיים בקו ישר עם כפות הרגליים. דחוף את הישבן לאחור.',
+                tips: 'שמור על חזה מורם, לא לעגל את הגב התחתון.'
+              },
+              {
+                type: 'exercise',
+                exercise: 'פלאנק',
+                duration: 45,
+                rest: 60,
+                explanation: 'התחל בעמדת שכיבות סמיכה, הנח את האמות על הרצפה. שמור על קו ישר מהכתפיים ועד העקבים. לא להרים או להוריד את הישבן יותר מדי.',
+                tips: 'הקשח את שרירי הבטן, נשום עמוק ואל תעצור את הנשימה.'
+              },
+              {
+                type: 'rest',
+                duration: 60,
+                rest: null
+              },
+              {
+                type: 'exercise',
+                exercise: 'מתיחות',
+                duration: 180,
+                reps: null,
+                rest: null,
+                explanation: 'בסיום האימון, חשוב למתוח את השרירים. התחל במתיחות פשוטות והחזק כל מתיחה למשך 20-30 שניות.',
+                tips: 'אל תגזים במתיחה כדי להימנע מפציעה.'
+              }
+            ];
+
+            startTrainingBtn.style.display = 'block';
+            exportMarkdownBtn.style.display = 'inline-block';
+            exportJsonBtn.style.display = 'inline-block';
+        } catch (error) {
+            console.error('Error generating workout plan:', error);
+            workoutPlanDisplay.innerHTML = `<p style="color:var(--danger);">אירעה שגיאה. נסה שוב מאוחר יותר. (שגיאה: ${error.message})</p>`;
+        } finally {
+            generateBtn.disabled = false;
+            loadingIndicator.style.display = 'none';
+        }
+    }
+
+    async function setupCamera() {
+    const video = $('video');
+    try {
+        // ניסיון ראשון: בקשת גישה למצלמה האחורית בצורה גמישה
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: { ideal: "environment" } } 
+        });
+        video.srcObject = stream;
+    } catch (err) {
+        // אם המצלמה האחורית לא זמינה, נסה מצלמה כלשהי (בדרך כלל הקדמית)
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+        } catch (err) {
+            console.error("שגיאה בגישה למצלמה:", err);
+            updateCoachingFeedback("שגיאה בגישה למצלמה. וודא שאישרת גישה ונסה שוב.", 'correction');
+        }
+    }
+}
+    
+    async function startTraining() {
+        if (!workoutPlan) {
+            updateCoachingFeedback('בבקשה צור תוכנית אימון לפני שמתחילים.', 'correction');
+            return;
+        }
+
+        if (!detectorReady) {
+            updateCoachingFeedback('מודל המאמן עדיין נטען, אנא המתן.', 'info');
+            return;
+        }
+        
+        $('startBtn').style.display = 'none';
+        $('pauseBtn').disabled = false;
+        $('nextBtn').disabled = false;
+        $('stopBtn').disabled = false;
+        
+        running = true;
+        
+        await setupCamera();
+        
+        startWorkoutBlock();
+        trainingLoop();
+        inactivityTimerId = setTimeout(checkInactivity, inactivityThreshold);
+    }
+
+    function pauseTraining() {
+        paused = !paused;
+        $('pauseBtn').textContent = paused ? 'המשך' : 'השהה';
+        if (paused) {
+            cancelAnimationFrame(animationFrameId);
+            clearTimeout(inactivityTimerId);
+            if (restId) clearInterval(restId);
+        } else {
+            trainingLoop();
+            if (workoutPlan[currentBlockIndex].type === 'rest') {
+              startRestTimer();
+            }
+            inactivityTimerId = setTimeout(checkInactivity, inactivityThreshold);
+        }
+    }
+
+    function nextBlock() {
+        cancelAnimationFrame(animationFrameId);
+        clearInterval(restId);
+        clearTimeout(inactivityTimerId);
+        currentBlockIndex++;
+        if (currentBlockIndex < workoutPlan.length) {
+            startWorkoutBlock();
+        } else {
+            stopTraining();
+        }
+    }
+
+    function startWorkoutBlock() {
+        if (currentBlockIndex >= workoutPlan.length) {
+            stopTraining();
+            return;
+        }
+        
+        const block = workoutPlan[currentBlockIndex];
+        $('currentExercise').textContent = block.exercise || 'מנוחה';
+        $('exerciseDetails').style.display = 'block';
+        $('exerciseExplanation').textContent = block.explanation || 'אין הסבר.';
+        $('exerciseTips').textContent = block.tips || 'אין טיפים זמינים.';
+        
+        exerciseCounter = 0;
+        consecutiveCorrectReps = 0;
+        exerciseState = 'start';
+        activityDetected = false;
+        
+        const spokenExplanation = `${block.exercise}. הסבר: ${block.explanation}. טיפים לביצוע: ${block.tips}. התחל.`;
+        speak(spokenExplanation, 'info');
+
+        if (block.type === 'rest') {
+            $('rest').textContent = `נותרו ${block.duration} שניות`;
+            speak(`קח מנוחה של ${block.duration} שניות.`);
+            startRestTimer();
+        } else {
+            $('rest').textContent = '—';
+            $('counter').textContent = `חזרות: 0/${block.reps}`;
+            inactivityTimerId = setTimeout(checkInactivity, inactivityThreshold);
+        }
+    }
+
+    function startRestTimer() {
+        restTime = workoutPlan[currentBlockIndex].duration;
+        restId = setInterval(() => {
+            restTime--;
+            $('rest').textContent = `נותרו ${restTime} שניות`;
+            if (restTime <= 0) {
+                clearInterval(restId);
+                nextBlock();
+            }
+        }, 1000);
+    }
+    
+    function stopTraining() {
+        running = false;
+        paused = false;
+        
+        if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+        }
+        
+        if (restId) {
+            clearInterval(restId);
+        }
+        
+        clearTimeout(inactivityTimerId);
+        
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+        }
+        
+        $('coachStatus').textContent = 'נעצר';
+        $('startBtn').style.display = 'block';
+        $('startBtn').disabled = false;
+        $('startBtn').textContent = 'התחל';
+        $('pauseBtn').disabled = true;
+        $('nextBtn').disabled = true;
+        $('stopBtn').disabled = true;
+        $('rest').textContent = '—';
+        $('counter').textContent = '—';
+        
+        const stopMessage = 'אימון נעצר. עבדת נהדר היום!';
+        speak(stopMessage, 'motivation');
+        updateCoachingFeedback(stopMessage, 'motivation');
+    }
+    
+    $('startBtn').onclick = startTraining;
+    $('pauseBtn').onclick = pauseTraining;
+    $('nextBtn').onclick = nextBlock;
+    $('stopBtn').onclick = stopTraining;
+
+    window.addEventListener('load', async () => {
+        if ('speechSynthesis' in window) {
+            console.log('Speech Synthesis is supported');
+        } else {
+            console.warn('Speech Synthesis not supported in this browser.');
+        }
+
+        document.querySelector('.tab').classList.add('active');
+        document.querySelector('.tab-content').classList.add('active');
+
+        updateCoachingFeedback('טוען את מודל המאמן הווירטואלי...', 'info');
+        $('startBtn').disabled = true;
+        try {
+            const detectorConfig = {modelType: poseDetection.movenet.SINGLEPOSE_LIGHTNING};
+            poseDetector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, detectorConfig);
+            detectorReady = true;
+            updateCoachingFeedback('המאמן הווירטואלי מוכן!', 'info');
+            $('startBtn').disabled = false;
+        } catch (error) {
+            console.error('Failed to load pose detector:', error);
+            updateCoachingFeedback('שגיאה בטעינת המאמן. נסה לרענן את הדף.', 'correction');
+        }
+    });
+</script>
+</body>
+</html>
